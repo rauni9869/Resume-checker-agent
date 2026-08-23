@@ -20,8 +20,8 @@ This is a rewrite of the original Colab notebook (`notebooks/original_colab.ipyn
 PDF / text
     → input guardrails (type, size, injection, PII)
     → native PDF text (OCR optional)
-    → embed resume/JD as context vectors (MiniLM; TF-IDF vectors if no GPU)
-    → score = 0.5 document cosine + 0.5 requirement-chunk coverage
+    → embed each JD requirement as a query and each resume bullet as a passage
+    → score = 0.25 document cosine + 0.75 mean max-similarity of requirements
     → keyword evidence for explanation only
     → critique + groundedness guardrails
     → HTML / JSON dashboard
@@ -100,7 +100,7 @@ For neural embeddings (recommended on your laptop):
 pip install -e ".[semantic]"
 ```
 
-First MiniLM download is ~80MB. Then start the dashboard as usual. Without that extra, scoring still uses **context vectors** (TF-IDF in a shared space), not a keyword list.
+First E5 download is ~30–80MB (`intfloat/e5-small-v2`). Scoring uses query/passage prefixes from the model card — not a hardcoded skill list. Without that extra, scoring still uses shared-space context vectors (TF-IDF word + char), not keyword equality.
 
 Analyze a PDF from the CLI:
 

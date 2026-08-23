@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     hf_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     hf_token: str = ""
 
-    semantic_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    semantic_model: str = "intfloat/e5-small-v2"
     embedding_backend: str = "auto"
     resume_matcher_model: str = "shankerram3/resumator"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"

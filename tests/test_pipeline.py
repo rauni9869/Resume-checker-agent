@@ -13,7 +13,32 @@ from resume_checker.scoring.ats import extract_skills, score_ats
 from resume_checker.scoring.matcher import semantic_match
 
 
-def test_semantic_vectors_rank_related_content_higher():
+def test_requirement_retrieval_uses_resume_bullet_context():
+    resume = (
+        "Work Experience\n"
+        "Built IndexEngine, a C++ database indexing benchmark engine implementing "
+        "B-Tree, B+-Tree, R-Tree, Bitmap, Sorted Array, and hashing indexes over 200K datasets.\n"
+        "Implemented B+-Tree linked-leaf traversal, achieving 37% faster inserts than B-Tree.\n"
+        "Head Events at a college fest; coordinated speakers and workshops."
+    )
+    job = (
+        "About us: a global cloud company with thousands of employees.\n"
+        "Qualifications: B.Tech in Computer Science. Strong fundamentals in "
+        "Operating Systems, Distributed Systems / Databases, File Systems."
+    )
+    match = semantic_match(resume, job)
+    database_hits = [
+        item
+        for item in match.alignments
+        if "database" in item.requirement.lower()
+    ]
+    assert database_hits, match.alignments
+    assert "database" in database_hits[0].resume_span.lower()
+    retail = semantic_match(
+        "Store manager. Hit sales quota and trained associates on excel inventory.",
+        job,
+    )
+    assert match.composite > retail.composite
     systems_resume = (
         "Built a C++17 multithreaded OS scheduler with mutexes, fairness metrics, "
         "and database B-tree indexes over 200K keys. Codeforces Expert."
