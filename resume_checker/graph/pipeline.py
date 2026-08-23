@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from langgraph.graph import END, START, StateGraph
 
 from resume_checker.graph.nodes import (
@@ -65,7 +67,15 @@ def analyze_resume(
             "guardrails": [],
             "blocked": False,
             "semantic_panel": [],
-        }
+            "extraction": None,
+            "ats": None,
+            "semantic_match": None,
+            "critique": None,
+            "composite_score": None,
+            "html_report": None,
+            "result": None,
+        },
+        config={"configurable": {"thread_id": str(uuid.uuid4())}},
     )
     if state.get("result"):
         return AnalysisResult.model_validate(state["result"])

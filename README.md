@@ -9,7 +9,7 @@ This is a rewrite of the original Colab notebook (`notebooks/original_colab.ipyn
 | Notebook (before) | This repo |
 | --- | --- |
 | Unbounded ReAct tool-calling with GPT-4o | Deterministic graph: validate → extract → score → critique → report |
-| OCR + TF-IDF only | Hybrid ATS (skill taxonomy + TF-IDF) plus optional specialist embedders |
+| Keyword overlap as the score | Semantic scoring: embed resume + JD chunks, cosine + max-sim coverage |
 | No evals | Golden guardrail set + Hugging Face resume-job-fit ranking evals |
 | Colab secrets | FastAPI + Docker + CI quality gates |
 | SendGrid as the “result” | Structured JSON/HTML report; email is optional |
@@ -20,11 +20,11 @@ This is a rewrite of the original Colab notebook (`notebooks/original_colab.ipyn
 PDF / text
     → input guardrails (type, size, injection, PII)
     → native PDF text (OCR optional)
-    → ATS skill coverage + TF-IDF
-    → optional specialist models (Resumator, MiniLM cross-encoder, JobBERT-v3)
-    → open-source critique (Ollama / Hugging Face) or offline template
-    → groundedness + score-consistency guardrails
-    → HTML / JSON report
+    → embed each JD requirement as a query and each resume bullet as a passage
+    → score = 0.25 document cosine + 0.75 mean max-similarity of requirements
+    → keyword evidence for explanation only
+    → critique + groundedness guardrails
+    → HTML / JSON dashboard
 ```
 
 Critique generation does **not** require a paid API:
@@ -94,7 +94,13 @@ resume-checker evaluate --dataset hf-sample
 uvicorn resume_checker.api:app --reload --port 8000
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Upload a PDF (or paste resume text), paste a job description, and get a composite fit score with matched/missing skills, dimension bars, rewrite suggestions, and guardrail flags.
+For neural embeddings (recommended on your laptop):
+
+```bash
+pip install -e ".[semantic]"
+```
+
+First E5 download is ~30–80MB (`intfloat/e5-small-v2`). Scoring uses query/passage prefixes from the model card — not a hardcoded skill list. Without that extra, scoring still uses shared-space context vectors (TF-IDF word + char), not keyword equality.
 
 Analyze a PDF from the CLI:
 

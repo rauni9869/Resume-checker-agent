@@ -9,6 +9,16 @@ const results = document.getElementById("results");
 const empty = document.getElementById("empty-state");
 const body = document.getElementById("result-body");
 
+const fileInput = form.resume;
+const textInput = form.resume_text;
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files && fileInput.files.length) textInput.value = "";
+});
+textInput.addEventListener("input", () => {
+  if (textInput.value.trim()) fileInput.value = "";
+});
+
 sampleBtn.addEventListener("click", () => {
   form.job_description.value = SAMPLE_JD;
 });
@@ -56,9 +66,24 @@ function render(data) {
   const score = data.composite_score ?? 0;
   document.getElementById("score-value").textContent = score.toFixed(1);
   document.getElementById("fit-label").textContent = data.blocked ? "Blocked by guardrails" : fitLabel(score);
+  const preview = (data.extraction?.text || "").replace(/\s+/g, " ").trim();
+  const snippet = preview ? preview.slice(0, 88) + (preview.length > 88 ? "…" : "") : "";
   document.getElementById("score-meta").textContent = data.blocked
     ? "The pipeline stopped before scoring."
-    : `Backend ${data.llm_backend} · candidate ${data.candidate_id}`;
+    : `Scored this run: “${snippet}” (${data.extraction?.char_count || preview.length} chars) · ${data.semantic_match?.backend || "vectors"} · ${data.llm_backend}`;
+
+  const semantic = data.semantic_match;
+  document.getElementById("semantic-meta").textContent = semantic
+    ? `Calibrated similarity (not raw cosine×100). Hits below the embedding floor score 0. Document ${semantic.document_score.toFixed(1)} · requirement coverage ${semantic.requirement_coverage.toFixed(1)} (mean of per-requirement calibrated max-hits)`
+    : "Semantic matcher did not run.";
+  const align = document.getElementById("alignments");
+  align.innerHTML = "";
+  for (const item of semantic?.alignments || []) {
+    const li = document.createElement("li");
+    li.textContent = `${item.score.toFixed(0)} · JD: ${item.requirement} ↔ Resume: ${item.resume_span}`;
+    align.appendChild(li);
+  }
+  if (!align.children.length) align.innerHTML = "<li>No requirement chunks to align.</li>";
   setRing(data.blocked ? 0 : score);
 
   const dims = data.critique
@@ -73,12 +98,16 @@ function render(data) {
     bars.appendChild(row);
   }
 
-  const ats = data.ats;
-  document.getElementById("ats-meta").textContent = ats
-    ? `Skill coverage ${ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${ats.keyword_similarity.toFixed(1)}%`
-    : "ATS features unavailable.";
-  chips(document.getElementById("matched-chips"), ats?.matched_skills, "No matched skills");
-  chips(document.getElementById("missing-chips"), ats?.missing_skills, "No missing required skills");
+  const semanticReqs = semantic?.matched_requirements?.length || semantic?.gap_requirements?.length;
+  const matched = semanticReqs ? semantic.matched_requirements : data.ats?.matched_skills;
+  const gaps = semanticReqs ? semantic.gap_requirements : data.ats?.missing_skills;
+  document.getElementById("ats-meta").textContent = semanticReqs
+    ? "JD phrases from this run. Stronger means calibrated score ≥ 25; weaker includes misses and weak word-overlap."
+    : (data.ats
+      ? `Skill coverage ${data.ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${data.ats.keyword_similarity.toFixed(1)}%`
+      : "Requirement evidence unavailable.");
+  chips(document.getElementById("matched-chips"), matched, "No stronger alignments");
+  chips(document.getElementById("missing-chips"), gaps, "No weaker alignments");
 
   document.getElementById("summary").textContent = data.critique?.summary || "No critique generated.";
   list(document.getElementById("strengths"), data.critique?.strengths);
@@ -90,7 +119,10 @@ function render(data) {
   for (const finding of data.guardrails || []) {
     const li = document.createElement("li");
     li.className = `sev-${finding.severity}`;
-    li.textContent = `${finding.code}: ${finding.message}`;
+    li.textContent =
+      finding.code === "prompt_injection"
+        ? `${finding.code}: ${finding.message} (does not freeze scores or chips; scoring still used the resume and JD.)`
+        : `${finding.code}: ${finding.message}`;
     g.appendChild(li);
   }
   if (!g.children.length) g.innerHTML = "<li>No guardrail findings.</li>";
@@ -101,8 +133,13 @@ form.addEventListener("submit", async (event) => {
   errorEl.hidden = true;
   submitBtn.disabled = true;
   submitBtn.textContent = "Scoring…";
-  const payload = new FormData(form);
-  if (!payload.get("resume") || !payload.get("resume").size) payload.delete("resume");
+  const payload = new FormData();
+  payload.set("job_description", form.job_description.value);
+  payload.set("candidate_id", form.candidate_id.value || "anonymous");
+  const pasted = (form.resume_text.value || "").trim();
+  const file = form.resume.files && form.resume.files[0];
+  if (pasted) payload.set("resume_text", pasted);
+  else if (file && file.size) payload.set("resume", file);
   try {
     const response = await fetch("/analyze", { method: "POST", body: payload });
     const data = await response.json();

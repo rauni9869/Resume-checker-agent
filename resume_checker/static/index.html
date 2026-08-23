@@ -16,7 +16,7 @@
         <p class="eyebrow">Open-source ATS agent</p>
         <h1>Score a resume against a job.</h1>
       </div>
-      <p class="lede">Upload a PDF or paste text. The pipeline extracts content, checks guardrails, and returns a composite fit score with missing skills and rewrite suggestions. No OpenAI key required.</p>
+      <p class="lede">Each Get score run embeds that resume against that job from scratch. Upload and paste are exclusive: typing in the box clears a leftover PDF so the first file is not scored again.</p>
     </header>
 
     <main class="grid">
@@ -61,9 +61,14 @@
             </div>
           </div>
           <div class="bars" id="dimension-bars"></div>
-          <h2>Skills vs job</h2>
+          <h2>Semantic match</h2>
+          <p class="meta" id="semantic-meta"></p>
+          <ul id="alignments"></ul>
+          <h2>Requirement evidence</h2>
           <p class="meta" id="ats-meta"></p>
+          <p class="chip-label">Stronger alignments (calibrated score at least 25, with resume evidence)</p>
           <div class="chips" id="matched-chips"></div>
+          <p class="chip-label">Weaker alignments (below 25 — including true gaps)</p>
           <div class="chips missing" id="missing-chips"></div>
           <h2>Critique</h2>
           <p id="summary"></p>
@@ -85,6 +90,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/dashboard.js"></script>
+  <script src="/static/dashboard.js?v=e5-band-070"></script>
 </body>
 </html>

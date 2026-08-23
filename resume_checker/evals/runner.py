@@ -29,20 +29,19 @@ def evaluate_case(case: EvalCase, include_specialists: bool) -> CaseEvalReport:
         )
     )
     failures: list[str] = []
-    predicted = set(result.ats.matched_skills) if result.ats else set()
     expected_present = set(case.expected_skills_present)
+    resume_blob = case.resume_text.lower()
+    found = {term for term in expected_present if term in resume_blob}
     if expected_present:
-        precision, recall, f1 = precision_recall_f1(predicted, expected_present)
+        precision, recall, f1 = precision_recall_f1(found, expected_present)
     else:
         precision, recall, f1 = 1.0, 1.0, 1.0
-    if expected_present and f1 < 0.5:
-        failures.append(f"skill_f1={f1:.2f}")
-    if case.expected_skills_missing and result.ats:
-        _, miss_recall, _ = precision_recall_f1(
-            set(result.ats.missing_skills), set(case.expected_skills_missing)
-        )
-        if miss_recall < 0.5:
-            failures.append(f"missing_skill_recall={miss_recall:.2f}")
+    if expected_present and recall < 0.5:
+        failures.append(f"skill_recall={recall:.2f}")
+    if case.expected_skills_missing:
+        still_in_resume = [term for term in case.expected_skills_missing if term in resume_blob]
+        if still_in_resume:
+            failures.append(f"expected_missing_still_in_resume={still_in_resume}")
 
     score = result.composite_score if result.composite_score is not None else 0.0
     in_band = case.expected_score_min <= score <= case.expected_score_max

@@ -19,7 +19,14 @@ def render_html_report(result: AnalysisResult) -> str:
         + (f" — {escape(s.notes)}" if s.notes else "")
         + "</li>"
         for s in result.semantic_panel
-    ) or "<li>Semantic panel not run.</li>"
+    ) or "<li>Optional specialist panel not run.</li>"
+    semantic = result.semantic_match
+    semantic_html = (
+        f"<p>Backend {escape(semantic.backend)} · document {semantic.document_score:.1f} · "
+        f"requirement coverage {semantic.requirement_coverage:.1f}</p>"
+        if semantic
+        else "<p>Semantic matcher did not run.</p>"
+    )
     suggestions = ""
     if critique:
         suggestions = "".join(f"<li>{escape(item)}</li>" for item in critique.rewrite_suggestions)
@@ -42,10 +49,14 @@ def render_html_report(result: AnalysisResult) -> str:
   <p class="muted">Candidate: {escape(result.candidate_id)} · backend: {escape(result.llm_backend)}</p>
   <p class="score">{score:.1f}<span class="muted"> / 100</span></p>
   <section>
-    <h2>ATS skill coverage</h2>
-    <p>Coverage {ats.required_skill_coverage if ats else 0:.1f}% · TF-IDF {ats.keyword_similarity if ats else 0:.1f}%</p>
-    <p><strong>Matched:</strong> {escape(matched)}</p>
-    <p><strong>Missing:</strong> {escape(missing)}</p>
+    <h2>Semantic match</h2>
+    {semantic_html}
+  </section>
+  <section>
+    <h2>Requirement evidence</h2>
+    <p>JD phrases ranked by retrieval (median split). Keyword leftover lists are not shown.</p>
+    <p><strong>Stronger alignments:</strong> {escape(matched)}</p>
+    <p><strong>Weaker alignments:</strong> {escape(missing)}</p>
   </section>
   <section>
     <h2>Open-source model panel</h2>

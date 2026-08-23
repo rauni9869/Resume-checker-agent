@@ -51,8 +51,8 @@ def main() -> None:
         else:
             print(f"composite={result.composite_score} blocked={result.blocked} backend={result.llm_backend}")
             if result.ats:
-                print("matched:", ", ".join(result.ats.matched_skills) or "—")
-                print("missing:", ", ".join(result.ats.missing_skills) or "—")
+                print("stronger:", ", ".join(result.ats.matched_skills) or "—")
+                print("weaker:", ", ".join(result.ats.missing_skills) or "—")
             for finding in result.guardrails:
                 print(f"[{finding.severity.value}] {finding.code}: {finding.message}")
         return

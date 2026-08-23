@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     hf_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     hf_token: str = ""
 
-    semantic_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    semantic_model: str = "intfloat/e5-small-v2"
+    embedding_backend: str = "auto"
     resume_matcher_model: str = "shankerram3/resumator"
     cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     job_title_model: str = "TechWolf/JobBERT-v3"
@@ -44,6 +45,7 @@ class Settings(BaseSettings):
             "ollama_base_url": "OLLAMA_BASE_URL",
             "hf_model": "HF_MODEL",
             "hf_token": "HF_TOKEN",
+            "embedding_backend": "RESUME_CHECKER_EMBEDDING_BACKEND",
             "sendgrid_api_key": "SENDGRID_API_KEY",
             "langfuse_public_key": "LANGFUSE_PUBLIC_KEY",
             "langfuse_secret_key": "LANGFUSE_SECRET_KEY",

@@ -13,9 +13,9 @@ from resume_checker.schemas import (
     DimensionScore,
     EvidenceSpan,
     ExtractionResult,
+    SemanticMatch,
     StructuredCritique,
 )
-from resume_checker.scoring.ats import extract_skills
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,8 @@ class Generator(Protocol):
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
+        semantic: SemanticMatch | None = None,
     ) -> StructuredCritique: ...
 
 
@@ -64,6 +66,8 @@ class TemplateGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
+        semantic: SemanticMatch | None = None,
     ) -> StructuredCritique:
         resume = extraction.text
         quote = _first_line(resume)
@@ -72,48 +76,60 @@ class TemplateGenerator:
         grammar_score = 78 if re.search(r"[.!?]", resume) else 55
         bullets = resume.count("•") + resume.count("- ")
         format_score = 82 if bullets else 60
-        impact_hits = len(re.findall(r"\b(\d+%|\$\d+|\d+\+)\b", resume))
-        impact_score = min(90.0, 58 + impact_hits * 8)
-        relevance = 0.6 * coverage + 0.4 * sim
-        overall = 0.4 * relevance + 0.2 * format_score + 0.2 * grammar_score + 0.2 * impact_score
+        impact_hits = len(re.findall(r"\b(\d+%|\$\d+|\d+\+|\d+\.\d+%?)\b", resume))
+        impact_score = min(90.0, 58 + min(impact_hits, 4) * 8)
+        relevance = semantic_score if semantic_score is not None else 0.6 * coverage + 0.4 * sim
+        overall = 0.55 * relevance + 0.15 * format_score + 0.15 * grammar_score + 0.15 * impact_score
 
-        strengths = [f"Highlights {skill}" for skill in ats.matched_skills[:4]] or [
+        matched = (semantic.matched_requirements if semantic else ats.matched_skills)[:8]
+        missing = (semantic.gap_requirements if semantic else ats.missing_skills)[:8]
+        strengths = [f"Resume aligns with: {skill}" for skill in matched[:4]] or [
             "Core professional sections are present."
         ]
-        gaps = [f"Job asks for {skill}, which is not evidenced" for skill in ats.missing_skills[:4]]
+        gaps = [f"Weaker evidence for: {skill}" for skill in missing[:4]]
         if not gaps:
             gaps = ["Quantify outcomes (%, $, time saved) in more bullets."]
 
         rewrites = []
-        for skill in ats.missing_skills[:3]:
-            rewrites.append(
-                f"Add a bullet that shows {skill} with a metric, e.g. "
-                f"'Built a {skill} workflow that cut review time by 30%'."
-            )
+        for skill in missing[:3]:
+            if re.search(r"b\.?\s*tech|m\.?\s*tech|degree|bachelor", skill, flags=re.I):
+                rewrites.append(
+                    f"Spell the degree as “{skill}” next to the institute and CPI — do not pair a degree with latency metrics."
+                )
+            else:
+                rewrites.append(
+                    f"Add a bullet that makes “{skill}” explicit and pairs it with a metric "
+                    f"(latency, throughput, scale, or accuracy)."
+                )
         if not rewrites:
             rewrites.append("Lead bullets with verbs and add one business metric per role.")
 
-        resume_skills = ", ".join(sorted(extract_skills(resume))[:8]) or "listed experience"
         return StructuredCritique(
             summary=(
-                f"Coverage of required skills is {coverage:.0f}% with TF-IDF similarity {sim:.0f}%. "
-                f"Matched: {', '.join(ats.matched_skills) or 'none'}. "
-                f"Missing: {', '.join(ats.missing_skills) or 'none'}."
+                f"Semantic fit {relevance:.0f}/100"
+                + (f" on {semantic.backend}." if semantic else ". ")
+                + f" Stronger alignments: {', '.join(matched[:5]) or 'none'}. "
+                f"Weaker alignments: {', '.join(missing[:5]) or 'none'}."
             ),
             strengths=strengths,
             gaps=gaps,
             rewrite_suggestions=rewrites,
-            grammar=_dim("grammar", grammar_score, "Sentence punctuation and structure scan.", quote),
+            grammar=_dim(
+                "writing_clarity",
+                grammar_score,
+                "Structure heuristic from the resume text (punctuation density). Not a grammar LLM.",
+                quote,
+            ),
             formatting=_dim(
                 "formatting",
                 format_score,
-                "Bullet density and section structure scan.",
+                "Structure heuristic: bullet/section density in the extracted text.",
                 quote,
             ),
             relevance=_dim(
                 "relevance",
                 relevance,
-                f"Skill overlap against the job description ({resume_skills}).",
+                "Context-vector similarity of the resume to the job (document + requirement chunks).",
                 quote,
             ),
             impact=_dim("impact", impact_score, "Counts measurable outcomes in the resume text.", quote),
@@ -141,6 +157,8 @@ class OllamaGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
+        semantic: SemanticMatch | None = None,
     ) -> StructuredCritique:
         from langchain_ollama import ChatOllama
 
@@ -154,6 +172,7 @@ class OllamaGenerator:
             f"JOB DESCRIPTION:\n{job_description[:4000]}\n\n"
             f"RESUME:\n{extraction.text[:8000]}\n\n"
             f"ATS_JSON:\n{ats.model_dump_json()}\n"
+            f"SEMANTIC_JSON:\n{(semantic.model_dump_json() if semantic else '{}')}\n"
         )
         response = llm.invoke(
             [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
@@ -172,6 +191,8 @@ class HuggingFaceGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
+        semantic: SemanticMatch | None = None,
     ) -> StructuredCritique:
         from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 
@@ -184,7 +205,7 @@ class HuggingFaceGenerator:
         llm = ChatHuggingFace(llm=endpoint)
         user = (
             f"Return JSON only.\nJOB:\n{job_description[:3000]}\nRESUME:\n{extraction.text[:6000]}\n"
-            f"ATS:{ats.model_dump_json()}"
+            f"ATS:{ats.model_dump_json()}\nSEMANTIC:{semantic.model_dump_json() if semantic else '{}'}"
         )
         response = llm.invoke(
             [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
