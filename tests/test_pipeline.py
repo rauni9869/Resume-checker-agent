@@ -57,8 +57,8 @@ def test_requirement_retrieval_uses_resume_bullet_context():
     unrelated = semantic_match(retail_resume, nutanix_job)
     assert related.composite > unrelated.composite
     assert related.document_score > unrelated.document_score
-    spans = [item.resume_span for item in related.alignments]
-    assert len(set(spans)) >= min(2, len(spans))
+    index_spans = [item.resume_span for item in match.alignments]
+    assert len(set(index_spans)) >= 2
 
 
 def test_dynamic_terms_come_from_the_documents():
