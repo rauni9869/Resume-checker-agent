@@ -62,6 +62,14 @@ def score_node(state: GraphState) -> GraphState:
         return {}
     ats = score_ats(state["extraction"].text, state["job_description"])
     match = semantic_match(state["extraction"].text, state["job_description"])
+    # Chips, critique, and CLI follow retrieval phrases — not leftover keyword tokens.
+    ats = ats.model_copy(
+        update={
+            "matched_skills": match.matched_requirements,
+            "missing_skills": match.gap_requirements,
+            "extra_skills": [],
+        }
+    )
     panel = score_semantic_panel(
         state["extraction"].text,
         state["job_description"],
@@ -85,6 +93,7 @@ def critique_node(state: GraphState) -> GraphState:
         state["job_description"],
         state["ats"],
         semantic_score=state.get("composite_score"),
+        semantic=state.get("semantic_match"),
     )
     critique, groundedness = apply_groundedness(critique, state["extraction"].text)
     critique = clamp_critique_scores(critique, state.get("composite_score") or critique.overall_score)

@@ -1,8 +1,8 @@
-"""Semantic scoring as retrieval: JD requirements vs resume passages.
+"""Semantic scoring as retrieval: JD requirement phrases vs resume bullets.
 
-No skill ontology. Vectors come from the documents themselves. Short JD
-phrases keep their surrounding sentence so "Databases" is encoded with the
-job's own context, then compared to full resume bullets (e.g. indexing / B-trees).
+Fragments and vectors are taken from the two documents. There is no skill
+dictionary. Short JD phrases are encoded as themselves (not glued to the
+whole qualifications sentence, which made every query look the same).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from functools import lru_cache
 
 import numpy as np
 from scipy.sparse import hstack
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.preprocessing import normalize
 
 from resume_checker.config import Settings, get_settings
@@ -23,6 +23,7 @@ from resume_checker.scoring.ats import job_focus_text
 logger = logging.getLogger(__name__)
 
 _MAX_PASSAGES = 40
+_STOP = {word.lower() for word in ENGLISH_STOP_WORDS}
 
 
 def _squash(text: str) -> str:
@@ -44,37 +45,50 @@ def _sentences(text: str) -> list[str]:
     return [_squash(part) for part in parts if _squash(part)]
 
 
-def requirement_queries(job_description: str) -> list[tuple[str, str]]:
-    """Return (display_phrase, embed_text) pairs taken only from the JD."""
+def _clean_phrase(phrase: str) -> str | None:
+    phrase = re.sub(r"\([^)]*\)", " ", phrase)
+    phrase = _squash(phrase).strip(" -:;.")
+    tokens = [_squash(token) for token in phrase.split()]
+    tokens = [token for token in tokens if token]
+    while tokens and re.sub(r"[^a-z0-9]+", "", tokens[0].lower()) in _STOP:
+        tokens.pop(0)
+    while tokens and re.sub(r"[^a-z0-9]+", "", tokens[-1].lower()) in _STOP:
+        tokens.pop()
+    if not tokens:
+        return None
+    content = [re.sub(r"[^a-z0-9+#.+]+", "", token.lower()) for token in tokens]
+    content = [token for token in content if token and token not in _STOP]
+    if not content:
+        return None
+    if len(content) == 1 and len(content[0]) < 2:
+        return None
+    return " ".join(tokens)
+
+
+def requirement_queries(job_description: str) -> list[str]:
+    """Requirement phrases copied from the JD only."""
     focus = job_focus_text(job_description)
-    queries: list[tuple[str, str]] = []
+    phrases: list[str] = []
     seen: set[str] = set()
     for sentence in _sentences(focus):
-        fragments = [
-            _squash(part).strip(" -:;")
-            for part in re.split(r"[,;/|•]|(?:\s+and\s+)", sentence)
-        ]
-        fragments = [part for part in fragments if 2 < len(part) <= 160]
-        if not fragments:
-            continue
-        for phrase in fragments:
+        fragments = [_squash(part) for part in re.split(r"[,;/|•]|(?:\s+and\s+)", sentence)]
+        for fragment in fragments:
+            phrase = _clean_phrase(fragment)
+            if not phrase:
+                continue
             key = phrase.lower()
             if key in seen:
                 continue
             seen.add(key)
-            # Keep the job sentence as context so a short requirement still
-            # carries meaning from neighboring qualifications.
-            embed = phrase if len(phrase) >= 48 else f"{phrase}. {sentence}"
-            queries.append((phrase, embed))
-    if not queries:
+            phrases.append(phrase)
+    if not phrases:
         blob = _squash(focus or job_description)
-        queries.append((blob[:160], blob[:1500] or "n/a"))
-    return queries[:_MAX_PASSAGES]
+        if blob:
+            phrases.append(blob[:160])
+    return phrases[:_MAX_PASSAGES]
 
 
 class TfidfEncoder:
-    """Shared vector space over the compared texts (no-GPU fallback)."""
-
     name = "tfidf-context-vectors"
 
     def encode(self, texts: list[str]) -> np.ndarray:
@@ -133,20 +147,18 @@ def semantic_match(
     job_focus = job_focus_text(job_description)
     passages = resume_passages(resume_text)
     queries = requirement_queries(job_description)
-    query_texts = [embed_text for _, embed_text in queries]
-    query_labels = [label for label, _ in queries]
 
     if isinstance(encoder, TransformerEncoder):
         resume_doc = encoder.encode([(resume_text or " ")[:7000]], as_query=False)[0]
         job_doc = encoder.encode([(job_focus or job_description or " ")[:7000]], as_query=True)[0]
         passage_mat = encoder.encode(passages, as_query=False)
-        query_mat = encoder.encode(query_texts, as_query=True)
+        query_mat = encoder.encode(queries, as_query=True)
     else:
         corpus = [
             (resume_text or " ")[:7000],
             (job_focus or job_description or " ")[:7000],
             *passages,
-            *query_texts,
+            *queries,
         ]
         matrix = encoder.encode(corpus)
         resume_doc, job_doc = matrix[0], matrix[1]
@@ -159,9 +171,8 @@ def semantic_match(
         sims = query_mat @ passage_mat.T
         best_idx = sims.argmax(axis=1)
         best_vals = sims.max(axis=1)
-        # Mean of per-requirement best hits — this is the retrieval score.
         coverage = float(best_vals.mean())
-        for label, idx, value in zip(query_labels, best_idx, best_vals, strict=True):
+        for label, idx, value in zip(queries, best_idx, best_vals, strict=True):
             alignments.append(
                 RequirementAlignment(
                     requirement=label[:240],
@@ -173,15 +184,35 @@ def semantic_match(
     else:
         coverage = document_cosine
 
+    scores = [item.score for item in alignments]
+    cut = float(np.median(scores)) if scores else 0.0
+    matched = [item.requirement for item in alignments if item.score >= cut]
+    gaps = [item.requirement for item in alignments if item.score < cut]
+
     document_score = _to_percent(document_cosine)
     requirement_coverage = _to_percent(coverage)
-    # Requirement retrieval dominates; full-doc cosine is only a mild prior
-    # so a long "About us" section cannot bury a matching bullet.
     composite = round(0.25 * document_score + 0.75 * requirement_coverage, 2)
     return SemanticMatch(
         backend=encoder.name,
         document_score=document_score,
         requirement_coverage=requirement_coverage,
         composite=composite,
-        alignments=alignments[:10],
+        alignments=_diversify_alignments(alignments, 12),
+        matched_requirements=matched[:12],
+        gap_requirements=gaps[:12],
     )
+
+
+def _diversify_alignments(alignments: list[RequirementAlignment], max_n: int) -> list[RequirementAlignment]:
+    """Prefer unique resume spans so the UI does not repeat one bullet."""
+    seen: set[str] = set()
+    unique: list[RequirementAlignment] = []
+    rest: list[RequirementAlignment] = []
+    for row in alignments:
+        key = row.resume_span[:100]
+        if key not in seen:
+            seen.add(key)
+            unique.append(row)
+        else:
+            rest.append(row)
+    return (unique + rest)[:max_n]

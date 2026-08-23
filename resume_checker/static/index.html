@@ -64,13 +64,11 @@
           <h2>Semantic match</h2>
           <p class="meta" id="semantic-meta"></p>
           <ul id="alignments"></ul>
-          <h2>Keyword evidence (not the score)</h2>
+          <h2>Requirement evidence</h2>
           <p class="meta" id="ats-meta"></p>
-          <p class="chip-label">Matched to this job</p>
+          <p class="chip-label">Stronger alignments (at or above the median retrieval score)</p>
           <div class="chips" id="matched-chips"></div>
-          <p class="chip-label">On the resume, not required by this JD</p>
-          <div class="chips extra" id="extra-chips"></div>
-          <p class="chip-label">Required by the JD, not evidenced</p>
+          <p class="chip-label">Weaker alignments (below the median — not leftover resume keywords)</p>
           <div class="chips missing" id="missing-chips"></div>
           <h2>Critique</h2>
           <p id="summary"></p>
@@ -92,6 +90,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/dashboard.js"></script>
+  <script src="/static/dashboard.js?v=requirement-evidence"></script>
 </body>
 </html>

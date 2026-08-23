@@ -53,10 +53,10 @@ def render_html_report(result: AnalysisResult) -> str:
     {semantic_html}
   </section>
   <section>
-    <h2>Keyword evidence</h2>
-    <p>Coverage {ats.required_skill_coverage if ats else 0:.1f}% · TF-IDF {ats.keyword_similarity if ats else 0:.1f}%</p>
-    <p><strong>Matched:</strong> {escape(matched)}</p>
-    <p><strong>Missing:</strong> {escape(missing)}</p>
+    <h2>Requirement evidence</h2>
+    <p>JD phrases ranked by retrieval (median split). Keyword leftover lists are not shown.</p>
+    <p><strong>Stronger alignments:</strong> {escape(matched)}</p>
+    <p><strong>Weaker alignments:</strong> {escape(missing)}</p>
   </section>
   <section>
     <h2>Open-source model panel</h2>

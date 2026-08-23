@@ -10,7 +10,7 @@ from resume_checker.graph.pipeline import analyze_resume
 from resume_checker.guardrails import redact_pii, scan_injection
 from resume_checker.schemas import AnalysisRequest, Severity
 from resume_checker.scoring.ats import extract_skills, score_ats
-from resume_checker.scoring.matcher import semantic_match
+from resume_checker.scoring.matcher import requirement_queries, semantic_match
 
 
 def test_requirement_retrieval_uses_resume_bullet_context():
@@ -39,6 +39,9 @@ def test_requirement_retrieval_uses_resume_bullet_context():
         job,
     )
     assert match.composite > retail.composite
+    assert match.matched_requirements or match.gap_requirements
+    phrases = requirement_queries(job)
+    assert all(not p.lower().startswith("is ") for p in phrases)
     systems_resume = (
         "Built a C++17 multithreaded OS scheduler with mutexes, fairness metrics, "
         "and database B-tree indexes over 200K keys. Codeforces Expert."
@@ -54,6 +57,8 @@ def test_requirement_retrieval_uses_resume_bullet_context():
     unrelated = semantic_match(retail_resume, nutanix_job)
     assert related.composite > unrelated.composite
     assert related.document_score > unrelated.document_score
+    spans = [item.resume_span for item in related.alignments]
+    assert len(set(spans)) >= min(2, len(spans))
 
 
 def test_dynamic_terms_come_from_the_documents():
@@ -165,6 +170,7 @@ def test_dashboard_page():
     page = client.get("/")
     assert page.status_code == 200
     assert "Score a resume against a job" in page.text
+    assert "Requirement evidence" in page.text
     css = client.get("/static/dashboard.css")
     assert css.status_code == 200
 
@@ -186,4 +192,8 @@ def test_analyze_api_from_dashboard():
     payload = response.json()
     assert payload["ok"] is True
     assert payload["composite_score"] is not None
-    assert any("python" in term for term in payload["ats"]["matched_skills"])
+    semantic = payload["semantic_match"]
+    assert semantic["matched_requirements"] or semantic["gap_requirements"]
+    assert payload["ats"]["extra_skills"] == []
+    blob = " ".join(semantic["matched_requirements"] + semantic["gap_requirements"]).lower()
+    assert "python" in blob or "aws" in blob or "docker" in blob

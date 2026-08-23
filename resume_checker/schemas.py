@@ -65,6 +65,8 @@ class SemanticMatch(BaseModel):
     requirement_coverage: float = Field(ge=0, le=100)
     composite: float = Field(ge=0, le=100)
     alignments: list[RequirementAlignment] = Field(default_factory=list)
+    matched_requirements: list[str] = Field(default_factory=list)
+    gap_requirements: list[str] = Field(default_factory=list)
 
 
 class DimensionScore(BaseModel):

@@ -86,13 +86,16 @@ function render(data) {
     bars.appendChild(row);
   }
 
-  const ats = data.ats;
-  document.getElementById("ats-meta").textContent = ats
-    ? `Skill coverage ${ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${ats.keyword_similarity.toFixed(1)}%`
-    : "ATS features unavailable.";
-  chips(document.getElementById("matched-chips"), ats?.matched_skills, "No matched skills");
-  chips(document.getElementById("extra-chips"), ats?.extra_skills, "No extra detected skills");
-  chips(document.getElementById("missing-chips"), ats?.missing_skills, "No missing required skills");
+  const semanticReqs = semantic?.matched_requirements?.length || semantic?.gap_requirements?.length;
+  const matched = semanticReqs ? semantic.matched_requirements : data.ats?.matched_skills;
+  const gaps = semanticReqs ? semantic.gap_requirements : data.ats?.missing_skills;
+  document.getElementById("ats-meta").textContent = semanticReqs
+    ? "JD phrases from the same retrieval used in the score. This panel no longer lists leftover keyword tokens from the resume."
+    : (data.ats
+      ? `Skill coverage ${data.ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${data.ats.keyword_similarity.toFixed(1)}%`
+      : "Requirement evidence unavailable.");
+  chips(document.getElementById("matched-chips"), matched, "No stronger alignments");
+  chips(document.getElementById("missing-chips"), gaps, "No weaker alignments");
 
   document.getElementById("summary").textContent = data.critique?.summary || "No critique generated.";
   list(document.getElementById("strengths"), data.critique?.strengths);
@@ -104,7 +107,10 @@ function render(data) {
   for (const finding of data.guardrails || []) {
     const li = document.createElement("li");
     li.className = `sev-${finding.severity}`;
-    li.textContent = `${finding.code}: ${finding.message}`;
+    li.textContent =
+      finding.code === "prompt_injection"
+        ? `${finding.code}: ${finding.message} (does not freeze scores or chips; scoring still used the resume and JD.)`
+        : `${finding.code}: ${finding.message}`;
     g.appendChild(li);
   }
   if (!g.children.length) g.innerHTML = "<li>No guardrail findings.</li>";
