@@ -88,18 +88,21 @@ resume-checker evaluate --dataset golden
 resume-checker evaluate --dataset hf-sample
 ```
 
-Analyze a PDF:
+## Dashboard
+
+```bash
+uvicorn resume_checker.api:app --reload --port 8000
+```
+
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Upload a PDF (or paste resume text), paste a job description, and get a composite fit score with matched/missing skills, dimension bars, rewrite suggestions, and guardrail flags.
+
+Analyze a PDF from the CLI:
 
 ```bash
 resume-checker analyze --resume path/to/resume.pdf --job "Senior Python engineer, AWS, Docker..."
 ```
 
-API:
-
-```bash
-uvicorn resume_checker.api:app --reload
-# POST /analyze  (multipart: job_description, resume PDF)
-```
+API: `POST /analyze` (multipart: `job_description`, `resume` PDF or `resume_text`).
 
 Docker:
 
@@ -133,7 +136,8 @@ export OLLAMA_MODEL=llama3.1:8b
 - Built a typed LangGraph pipeline (validate → extract → ATS score → critique → report) with FastAPI/Docker, replacing a Colab ReAct notebook.  
 - Hybrid scoring: deterministic skill-taxonomy + TF-IDF ATS features, plus optional JobBERT-v3 / Resumator / MiniLM cross-encoder panel — no OpenAI dependency.  
 - Evaluation harness on Hugging Face `resume-job-description-fit` (pairwise ranking + Spearman vs fit labels) and a golden set for injection, PII, and groundedness gates in CI.  
-- Production guardrails: schema-validated output, citation checks, prompt-injection blocking, and PII redaction before generation.
+- Production guardrails: schema-validated output, citation checks, prompt-injection blocking, and PII redaction before generation.  
+- Shipped a FastAPI scoring dashboard for resume PDF / JD upload with skill coverage, fit band, and grounded critique.
 
 ## License
 

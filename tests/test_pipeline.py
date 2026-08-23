@@ -91,3 +91,32 @@ def test_metrics_helpers():
 def test_health_endpoint():
     client = TestClient(app)
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_dashboard_page():
+    client = TestClient(app)
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Score a resume against a job" in page.text
+    css = client.get("/static/dashboard.css")
+    assert css.status_code == 200
+
+
+def test_analyze_api_from_dashboard():
+    client = TestClient(app)
+    response = client.post(
+        "/analyze",
+        data={
+            "job_description": "Senior Software Engineer needing Python, SQL, AWS, Docker, and Kubernetes.",
+            "resume_text": (
+                "Maya Chen\nSoftware Engineer\nExperience\n- Led a team shipping Python APIs on AWS.\n"
+                "- Docker/Kubernetes, SQL, CI/CD.\nEducation\nB.S. Computer Science"
+            ),
+            "candidate_id": "maya",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["composite_score"] is not None
+    assert "python" in payload["ats"]["matched_skills"]

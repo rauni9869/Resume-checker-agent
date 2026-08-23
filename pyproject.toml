@@ -48,7 +48,7 @@ resume-checker = "resume_checker.cli:main"
 include = ["resume_checker*"]
 
 [tool.setuptools.package-data]
-resume_checker = ["evals/golden.json"]
+resume_checker = ["evals/golden.json", "static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
