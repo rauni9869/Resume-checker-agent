@@ -22,8 +22,10 @@ from resume_checker.scoring.ats import job_focus_text
 
 logger = logging.getLogger(__name__)
 
-_MAX_PASSAGES = 40
+_MAX_PASSAGES = 160
+_MAX_QUERIES = 40
 _STOP = {word.lower() for word in ENGLISH_STOP_WORDS}
+_CHIP_MIN = 40.0
 
 
 def _squash(text: str) -> str:
@@ -31,8 +33,34 @@ def _squash(text: str) -> str:
 
 
 def resume_passages(text: str) -> list[str]:
-    parts = re.split(r"\n+|•|(?<=[.!?])\s+", text or "")
-    passages = [_squash(part) for part in parts]
+    """Keep wrapped PDF bullets intact and do not drop later projects."""
+    lines = [ln.strip() for ln in (text or "").replace("•", "\n•").splitlines()]
+    merged: list[str] = []
+    buf = ""
+    for line in lines:
+        if not line:
+            if buf:
+                merged.append(buf)
+                buf = ""
+            continue
+        is_bullet = line.startswith("•") or line.startswith("- ")
+        payload = line[2:].strip() if line.startswith("- ") else line.lstrip("•").strip()
+        if not payload:
+            continue
+        if is_bullet:
+            if buf:
+                merged.append(buf)
+            buf = payload
+            continue
+        if buf and re.match(r"[a-z]", payload) and not re.search(r"[.!?]$", buf) and len(buf) < 160:
+            buf = f"{buf} {payload}"
+        else:
+            if buf:
+                merged.append(buf)
+            buf = payload
+    if buf:
+        merged.append(buf)
+    passages = [_squash(part) for part in merged]
     passages = [part for part in passages if len(part) >= 20]
     if not passages:
         blob = _squash(text)
@@ -47,6 +75,12 @@ def _sentences(text: str) -> list[str]:
 
 def _clean_phrase(phrase: str) -> str | None:
     phrase = re.sub(r"\([^)]*\)", " ", phrase)
+    phrase = re.sub(
+        r"^(qualifications|requirements|responsibilities|must have)\s*:\s*",
+        "",
+        phrase,
+        flags=re.I,
+    )
     phrase = _squash(phrase).strip(" -:;.")
     tokens = [_squash(token) for token in phrase.split()]
     tokens = [token for token in tokens if token]
@@ -60,9 +94,61 @@ def _clean_phrase(phrase: str) -> str | None:
     content = [token for token in content if token and token not in _STOP]
     if not content:
         return None
-    if len(content) == 1 and len(content[0]) < 2:
+    if not _keep_query(phrase, content):
         return None
     return " ".join(tokens)
+
+
+def _keep_query(phrase: str, content: list[str]) -> bool:
+    if len(content) >= 2:
+        return True
+    token = content[0]
+    if re.search(r"[0-9+#]", token) or len(token) >= 8:
+        return True
+    if re.search(r"b\.?\s*tech|m\.?\s*tech", phrase, flags=re.I):
+        return True
+    if re.fullmatch(r"[A-Z]{2,6}", phrase.strip()):
+        return True
+    return False
+
+
+def _fold_tokens(text: str) -> set[str]:
+    blob = (text or "").lower().replace("c++", "cpp")
+    blob = re.sub(r"b\.?\s*tech", "btech", blob)
+    blob = re.sub(r"m\.?\s*tech", "mtech", blob)
+    blob = re.sub(r"[^a-z0-9+#]+", " ", blob)
+    tokens: set[str] = set()
+    for token in blob.split():
+        if token in _STOP or len(token) < 2:
+            continue
+        if token.endswith("s") and len(token) > 4:
+            token = token[:-1]
+        tokens.add(token)
+    return tokens
+
+
+def _lexically_supported(query: str, passage: str) -> bool:
+    query_tokens = _fold_tokens(query)
+    passage_tokens = _fold_tokens(passage)
+    if not query_tokens:
+        return False
+    must = {token for token in query_tokens if token in {"cpp", "btech", "mtech"} or any(ch.isdigit() for ch in token)}
+    if must:
+        return must <= passage_tokens
+    if query_tokens <= passage_tokens:
+        return True
+    core = {token for token in query_tokens if len(token) >= 5}
+    return bool(core) and core <= passage_tokens
+
+
+def _select_passage(sims_row: np.ndarray, passages: list[str], query: str) -> tuple[int, float]:
+    order = np.argsort(-sims_row)
+    supported = [int(idx) for idx in order[:16] if _lexically_supported(query, passages[int(idx)])]
+    if supported:
+        idx = max(supported, key=lambda i: float(sims_row[i]))
+        return idx, float(sims_row[idx])
+    idx = int(order[0])
+    return idx, float(sims_row[idx])
 
 
 def requirement_queries(job_description: str) -> list[str]:
@@ -85,7 +171,7 @@ def requirement_queries(job_description: str) -> list[str]:
         blob = _squash(focus or job_description)
         if blob:
             phrases.append(blob[:160])
-    return phrases[:_MAX_PASSAGES]
+    return phrases[:_MAX_QUERIES]
 
 
 class TfidfEncoder:
@@ -184,16 +270,17 @@ def semantic_match(
     alignments: list[RequirementAlignment] = []
     if len(query_mat) and len(passage_mat):
         sims = query_mat @ passage_mat.T
-        best_idx = sims.argmax(axis=1)
-        best_vals = sims.max(axis=1)
         coverage_hits: list[float] = []
-        for label, idx, value in zip(queries, best_idx, best_vals, strict=True):
-            calibrated = calibrate_cosine(float(value), neural=neural)
+        for q_i, label in enumerate(queries):
+            idx, raw = _select_passage(sims[q_i], passages, label)
+            calibrated = calibrate_cosine(raw, neural=neural)
+            if _lexically_supported(label, passages[idx]):
+                calibrated = max(calibrated, 55.0)
             coverage_hits.append(calibrated)
             alignments.append(
                 RequirementAlignment(
                     requirement=label[:240],
-                    resume_span=passages[int(idx)][:240],
+                    resume_span=passages[idx][:240],
                     score=calibrated,
                 )
             )
@@ -202,8 +289,8 @@ def semantic_match(
     else:
         coverage = calibrate_cosine(document_cosine, neural=neural)
 
-    matched = [item.requirement for item in alignments if item.score > 0]
-    gaps = [item.requirement for item in alignments if item.score <= 0]
+    matched = [item.requirement for item in alignments if item.score >= _CHIP_MIN]
+    gaps = [item.requirement for item in alignments if item.score < _CHIP_MIN]
 
     document_score = calibrate_cosine(document_cosine, neural=neural)
     requirement_coverage = round(float(coverage), 2)

@@ -63,6 +63,33 @@ def test_requirement_retrieval_uses_resume_bullet_context():
     assert len(set(index_spans)) >= 2
 
 
+def test_later_resume_projects_are_retrieved():
+    filler = "\n".join(
+        f"Filler internship bullet number {i} about OCR GPUs and monitoring dashboards."
+        for i in range(45)
+    )
+    resume = (
+        f"{filler}\n"
+        "B.S(SDS) & B.Tech(MSE) IIT Kanpur\n"
+        "Built C++17 multithreaded OS scheduler implementing FIFO, Round Robin, mutex and spinlock.\n"
+        "Built IndexEngine, a C++ database indexing benchmark with B-Tree indexes over 200K datasets.\n"
+        "Languages: C, C++, Python, Javascript, Git, Bash, MPI, OpenMP"
+    )
+    job = (
+        "Qualifications: BTech. C++ programming skills. Operating System fundamentals: "
+        "multi-processing. data structures. Algorithms."
+    )
+    match = semantic_match(resume, job)
+    spans = " ".join(item.resume_span.lower() for item in match.alignments)
+    assert "scheduler" in spans or "indexengine" in spans or "c++17" in spans
+    phrases = requirement_queries(job)
+    assert "Operating" not in phrases
+    assert any("btech" in item.requirement.lower().replace(".", "") for item in match.alignments)
+    btech = next(item for item in match.alignments if "btech" in item.requirement.lower().replace(".", ""))
+    assert "b.tech" in btech.resume_span.lower() or "btech" in btech.resume_span.lower().replace(".", "")
+    assert btech.score >= 40
+
+
 def test_cosine_floor_zeros_weak_e5_band():
     assert calibrate_cosine(0.79, neural=True) < 10
     assert calibrate_cosine(0.84, neural=True) < 50

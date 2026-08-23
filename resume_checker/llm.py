@@ -92,10 +92,15 @@ class TemplateGenerator:
 
         rewrites = []
         for skill in missing[:3]:
-            rewrites.append(
-                f"Add a bullet that makes “{skill}” explicit and pairs it with a metric "
-                f"(latency, throughput, scale, or accuracy)."
-            )
+            if re.search(r"b\.?\s*tech|m\.?\s*tech|degree|bachelor", skill, flags=re.I):
+                rewrites.append(
+                    f"Spell the degree as “{skill}” next to the institute and CPI — do not pair a degree with latency metrics."
+                )
+            else:
+                rewrites.append(
+                    f"Add a bullet that makes “{skill}” explicit and pairs it with a metric "
+                    f"(latency, throughput, scale, or accuracy)."
+                )
         if not rewrites:
             rewrites.append("Lead bullets with verbs and add one business metric per role.")
 
