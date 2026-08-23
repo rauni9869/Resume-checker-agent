@@ -19,6 +19,10 @@ textInput.addEventListener("input", () => {
   if (textInput.value.trim()) fileInput.value = "";
 });
 
+sampleBtn.addEventListener("click", () => {
+  form.job_description.value = SAMPLE_JD;
+});
+
 function fitLabel(score) {
   if (score < 40) return "No fit";
   if (score < 65) return "Potential fit";
