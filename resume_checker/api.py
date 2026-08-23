@@ -47,12 +47,12 @@ def run_analysis(
 ) -> AnalysisResult:
     tmp_path = None
     text = (resume_text or "").strip() or None
-    if file_bytes:
+    # A leftover PDF in the form must not override a newly pasted resume.
+    if file_bytes and not text:
         name = (filename or "").lower()
         is_pdf = file_bytes.startswith(b"%PDF") or name.endswith(".pdf")
         if is_pdf:
             tmp_path = _write_pdf(file_bytes)
-            text = None
         else:
             text = file_bytes.decode("utf-8", errors="replace")
     if not tmp_path and not text:

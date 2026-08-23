@@ -9,8 +9,14 @@ const results = document.getElementById("results");
 const empty = document.getElementById("empty-state");
 const body = document.getElementById("result-body");
 
-sampleBtn.addEventListener("click", () => {
-  form.job_description.value = SAMPLE_JD;
+const fileInput = form.resume;
+const textInput = form.resume_text;
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files && fileInput.files.length) textInput.value = "";
+});
+textInput.addEventListener("input", () => {
+  if (textInput.value.trim()) fileInput.value = "";
 });
 
 function fitLabel(score) {
@@ -56,9 +62,11 @@ function render(data) {
   const score = data.composite_score ?? 0;
   document.getElementById("score-value").textContent = score.toFixed(1);
   document.getElementById("fit-label").textContent = data.blocked ? "Blocked by guardrails" : fitLabel(score);
+  const preview = (data.extraction?.text || "").replace(/\s+/g, " ").trim();
+  const snippet = preview ? preview.slice(0, 88) + (preview.length > 88 ? "…" : "") : "";
   document.getElementById("score-meta").textContent = data.blocked
     ? "The pipeline stopped before scoring."
-    : `Semantic ${data.semantic_match?.backend || "vectors"} · ${data.llm_backend} · ${data.candidate_id}`;
+    : `Scored this run: “${snippet}” (${data.extraction?.char_count || preview.length} chars) · ${data.semantic_match?.backend || "vectors"} · ${data.llm_backend}`;
 
   const semantic = data.semantic_match;
   document.getElementById("semantic-meta").textContent = semantic
@@ -121,8 +129,13 @@ form.addEventListener("submit", async (event) => {
   errorEl.hidden = true;
   submitBtn.disabled = true;
   submitBtn.textContent = "Scoring…";
-  const payload = new FormData(form);
-  if (!payload.get("resume") || !payload.get("resume").size) payload.delete("resume");
+  const payload = new FormData();
+  payload.set("job_description", form.job_description.value);
+  payload.set("candidate_id", form.candidate_id.value || "anonymous");
+  const pasted = (form.resume_text.value || "").trim();
+  const file = form.resume.files && form.resume.files[0];
+  if (pasted) payload.set("resume_text", pasted);
+  else if (file && file.size) payload.set("resume", file);
   try {
     const response = await fetch("/analyze", { method: "POST", body: payload });
     const data = await response.json();

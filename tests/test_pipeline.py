@@ -208,3 +208,52 @@ def test_analyze_api_from_dashboard():
     assert payload["ats"]["extra_skills"] == []
     blob = " ".join(semantic["matched_requirements"] + semantic["gap_requirements"]).lower()
     assert "python" in blob or "aws" in blob or "docker" in blob
+
+
+def test_each_analyze_call_scores_the_new_resume():
+    job = "Senior Software Engineer needing Python, SQL, AWS, Docker, Kubernetes, and production APIs."
+    first = analyze_resume(
+        AnalysisRequest(
+            job_description=job,
+            resume_text=(
+                "Maya Chen\nSoftware Engineer\n- Led Python APIs on AWS with Docker and Kubernetes.\n"
+                "- SQL, CI/CD, 2M requests/day."
+            ),
+            candidate_id="maya",
+        )
+    )
+    second = analyze_resume(
+        AnalysisRequest(
+            job_description=job,
+            resume_text=(
+                "Sam Patel\nRetail Store Manager\n- Hit quarterly sales quota and trained 12 associates.\n"
+                "- Excel inventory trackers and customer service."
+            ),
+            candidate_id="sam",
+        )
+    )
+    assert first.extraction and "Maya Chen" in first.extraction.text
+    assert second.extraction and "Sam Patel" in second.extraction.text
+    assert first.composite_score > second.composite_score
+
+
+def test_pasted_resume_overrides_stale_upload(tmp_path: Path):
+    pdf_path = tmp_path / "stale.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Maya Chen leftover PDF that must not be reused")
+    doc.save(pdf_path)
+    doc.close()
+    client = TestClient(app)
+    response = client.post(
+        "/analyze",
+        data={
+            "job_description": "Senior Software Engineer needing Python, SQL, AWS, Docker, and Kubernetes.",
+            "resume_text": "Sam Patel\nRetail manager. Sales quota, excel inventory, customer service training.",
+        },
+        files={"resume": ("stale.pdf", pdf_path.read_bytes(), "application/pdf")},
+    )
+    assert response.status_code == 200
+    text = response.json()["extraction"]["text"]
+    assert "Sam Patel" in text
+    assert "Maya Chen" not in text
