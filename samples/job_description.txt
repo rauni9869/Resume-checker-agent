@@ -1,0 +1,1 @@
+Senior Software Engineer, 5+ years. Required: Python, SQL, AWS, Docker, Kubernetes, REST APIs, CI/CD, and the ability to lead a small team.
