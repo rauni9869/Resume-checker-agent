@@ -115,6 +115,8 @@ button:disabled { opacity: 0.55; cursor: wait; }
   color: var(--forest);
 }
 .chips.missing .chip { background: #f8e6dc; color: var(--accent); }
+.chips.extra .chip { background: #efe8d8; color: var(--ink); }
+.chip-label { font-size: 0.78rem; font-weight: 600; margin: 0.35rem 0 0.25rem; color: var(--muted); }
 
 h2 { font-family: Fraunces, serif; font-size: 1.25rem; margin: 1.1rem 0 0.4rem; }
 h3 { font-size: 0.9rem; margin: 0.6rem 0 0.3rem; }

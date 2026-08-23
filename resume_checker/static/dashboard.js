@@ -78,6 +78,7 @@ function render(data) {
     ? `Skill coverage ${ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${ats.keyword_similarity.toFixed(1)}%`
     : "ATS features unavailable.";
   chips(document.getElementById("matched-chips"), ats?.matched_skills, "No matched skills");
+  chips(document.getElementById("extra-chips"), ats?.extra_skills, "No extra detected skills");
   chips(document.getElementById("missing-chips"), ats?.missing_skills, "No missing required skills");
 
   document.getElementById("summary").textContent = data.critique?.summary || "No critique generated.";

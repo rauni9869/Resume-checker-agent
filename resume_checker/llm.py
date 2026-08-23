@@ -72,8 +72,8 @@ class TemplateGenerator:
         grammar_score = 78 if re.search(r"[.!?]", resume) else 55
         bullets = resume.count("•") + resume.count("- ")
         format_score = 82 if bullets else 60
-        impact_hits = len(re.findall(r"\b(\d+%|\$\d+|\d+\+)\b", resume))
-        impact_score = min(90.0, 58 + impact_hits * 8)
+        impact_hits = len(re.findall(r"\b(\d+%|\$\d+|\d+\+|\d+\.\d+%?)\b", resume))
+        impact_score = min(90.0, 58 + min(impact_hits, 4) * 8)
         relevance = 0.6 * coverage + 0.4 * sim
         overall = 0.4 * relevance + 0.2 * format_score + 0.2 * grammar_score + 0.2 * impact_score
 
@@ -87,8 +87,8 @@ class TemplateGenerator:
         rewrites = []
         for skill in ats.missing_skills[:3]:
             rewrites.append(
-                f"Add a bullet that shows {skill} with a metric, e.g. "
-                f"'Built a {skill} workflow that cut review time by 30%'."
+                f"Add one bullet that names {skill} explicitly and pairs it with a metric "
+                f"(latency, throughput, scale, or accuracy)."
             )
         if not rewrites:
             rewrites.append("Lead bullets with verbs and add one business metric per role.")
@@ -103,11 +103,16 @@ class TemplateGenerator:
             strengths=strengths,
             gaps=gaps,
             rewrite_suggestions=rewrites,
-            grammar=_dim("grammar", grammar_score, "Sentence punctuation and structure scan.", quote),
+            grammar=_dim(
+                "writing_clarity",
+                grammar_score,
+                "Structure heuristic from the resume text (punctuation density). Not a grammar LLM.",
+                quote,
+            ),
             formatting=_dim(
                 "formatting",
                 format_score,
-                "Bullet density and section structure scan.",
+                "Structure heuristic: bullet/section density in the extracted text.",
                 quote,
             ),
             relevance=_dim(

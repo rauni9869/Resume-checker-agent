@@ -12,6 +12,29 @@ from resume_checker.schemas import AnalysisRequest, Severity
 from resume_checker.scoring.ats import extract_skills, score_ats
 
 
+def test_dynamic_terms_come_from_the_documents():
+    resume = """
+    Prashant Shekhar, IIT Kanpur, B.Tech
+    Skills: C, C++, Python, Javascript, Git, Bash, MPI, OpenMP, MySQL
+    Built C++17 multithreaded OS scheduler implementing FIFO, Round Robin, mutex and spinlock.
+    IndexEngine C++ database indexing B-Tree over 200K datasets. Codeforces Expert 1779.
+    """
+    job = """
+    About us: we are 6000 employees in San Jose making computing invisible.
+    Qualifications:
+    Strong command over C/C++/Java/Golang and multi-threaded techniques.
+    Strong fundamentals in Operating Systems, Distributed Systems / Databases, File Systems.
+    Algorithms, Data Structures. Linux Kernel Internals.
+    """
+    ats = score_ats(resume, job)
+    resume_terms = extract_skills(resume)
+    assert any("c++" in term for term in resume_terms)
+    assert any("python" in term for term in resume_terms)
+    assert any("c++" in term for term in ats.matched_skills)
+    assert any("java" in term or "golang" in term for term in ats.missing_skills)
+    assert ats.required_skill_coverage >= 25
+
+
 def test_skill_extraction_and_coverage():
     resume = "Built Python FastAPI services on AWS with Docker and Kubernetes. SQL on PostgreSQL."
     job = "Need Python, AWS, Docker, Kubernetes, SQL, and Terraform."
@@ -119,4 +142,4 @@ def test_analyze_api_from_dashboard():
     payload = response.json()
     assert payload["ok"] is True
     assert payload["composite_score"] is not None
-    assert "python" in payload["ats"]["matched_skills"]
+    assert any("python" in term for term in payload["ats"]["matched_skills"])
