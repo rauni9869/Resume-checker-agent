@@ -102,7 +102,7 @@ function render(data) {
   const matched = semanticReqs ? semantic.matched_requirements : data.ats?.matched_skills;
   const gaps = semanticReqs ? semantic.gap_requirements : data.ats?.missing_skills;
   document.getElementById("ats-meta").textContent = semanticReqs
-    ? "JD phrases from this run. Stronger means calibrated score ≥ 40; weaker includes misses and weak word-overlap."
+    ? "JD phrases from this run. Stronger means calibrated score ≥ 25; weaker includes misses and weak word-overlap."
     : (data.ats
       ? `Skill coverage ${data.ats.required_skill_coverage.toFixed(1)}% · keyword similarity ${data.ats.keyword_similarity.toFixed(1)}%`
       : "Requirement evidence unavailable.");

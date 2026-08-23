@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _MAX_PASSAGES = 160
 _MAX_QUERIES = 40
 _STOP = {word.lower() for word in ENGLISH_STOP_WORDS}
-_CHIP_MIN = 40.0
+_CHIP_MIN = 25.0
 
 
 def _squash(text: str) -> str:
@@ -219,11 +219,10 @@ def get_encoder(backend: str = "auto", model_id: str = "intfloat/e5-small-v2"):
     return TfidfEncoder()
 
 
-# Bi-encoders (E5) put most English professional text in a high cosine band.
-# Reporting cosine*100 made 0.79 look like a 79% match. Hits below the floor
-# contribute 0; 100 means cosine at or above the "full credit" end of the band.
-_NEURAL_FLOOR = 0.78
-_NEURAL_FULL = 0.92
+# E5 cosine is high for any English professional text. Map the useful band
+# [0.70, 0.90] → [0, 100]. 0.78 floor made real C++/OS hits look like 0–25.
+_NEURAL_FLOOR = 0.70
+_NEURAL_FULL = 0.90
 _SPARSE_FLOOR = 0.08
 _SPARSE_FULL = 0.38
 

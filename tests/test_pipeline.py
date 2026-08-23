@@ -91,10 +91,11 @@ def test_later_resume_projects_are_retrieved():
 
 
 def test_cosine_floor_zeros_weak_e5_band():
-    assert calibrate_cosine(0.79, neural=True) < 10
-    assert calibrate_cosine(0.84, neural=True) < 50
-    assert calibrate_cosine(0.92, neural=True) == 100
+    assert calibrate_cosine(0.65, neural=True) == 0
     assert calibrate_cosine(0.70, neural=True) == 0
+    assert 40 < calibrate_cosine(0.79, neural=True) < 55
+    assert 65 < calibrate_cosine(0.84, neural=True) < 80
+    assert calibrate_cosine(0.90, neural=True) == 100
     assert calibrate_cosine(0.20, neural=False) > 30
     assert calibrate_cosine(0.04, neural=False) == 0
 
