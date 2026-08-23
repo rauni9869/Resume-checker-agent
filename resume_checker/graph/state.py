@@ -6,6 +6,7 @@ from resume_checker.schemas import (
     ATSScore,
     ExtractionResult,
     GuardrailFinding,
+    SemanticMatch,
     SemanticScore,
     StructuredCritique,
 )
@@ -21,6 +22,7 @@ class GraphState(TypedDict, total=False):
     include_specialists: bool
     extraction: ExtractionResult | None
     ats: ATSScore | None
+    semantic_match: SemanticMatch | None
     semantic_panel: list[SemanticScore]
     critique: StructuredCritique | None
     composite_score: float | None

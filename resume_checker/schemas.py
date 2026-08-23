@@ -53,6 +53,20 @@ class SemanticScore(BaseModel):
     notes: str = ""
 
 
+class RequirementAlignment(BaseModel):
+    requirement: str
+    resume_span: str
+    score: float = Field(ge=0, le=100)
+
+
+class SemanticMatch(BaseModel):
+    backend: str
+    document_score: float = Field(ge=0, le=100)
+    requirement_coverage: float = Field(ge=0, le=100)
+    composite: float = Field(ge=0, le=100)
+    alignments: list[RequirementAlignment] = Field(default_factory=list)
+
+
 class DimensionScore(BaseModel):
     name: str
     score: float = Field(ge=0, le=100)
@@ -99,6 +113,7 @@ class AnalysisResult(BaseModel):
     candidate_id: str
     extraction: ExtractionResult | None = None
     ats: ATSScore | None = None
+    semantic_match: SemanticMatch | None = None
     semantic_panel: list[SemanticScore] = Field(default_factory=list)
     critique: StructuredCritique | None = None
     composite_score: float | None = Field(default=None, ge=0, le=100)

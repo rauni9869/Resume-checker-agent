@@ -18,6 +18,7 @@ from resume_checker.llm import build_generator
 from resume_checker.reporting import render_html_report
 from resume_checker.schemas import AnalysisResult, GuardrailFinding, Severity
 from resume_checker.scoring.ats import score_ats
+from resume_checker.scoring.matcher import semantic_match
 from resume_checker.scoring.semantic import score_semantic_panel
 
 
@@ -60,17 +61,18 @@ def score_node(state: GraphState) -> GraphState:
     if state.get("blocked") or not state.get("extraction"):
         return {}
     ats = score_ats(state["extraction"].text, state["job_description"])
+    match = semantic_match(state["extraction"].text, state["job_description"])
     panel = score_semantic_panel(
         state["extraction"].text,
         state["job_description"],
         include_specialists=bool(state.get("include_specialists")),
     )
-    usable = [p.score for p in panel if not p.notes]
-    semantic_avg = sum(usable) / len(usable) if usable else ats.keyword_similarity
-    composite = round(
-        0.5 * ats.required_skill_coverage + 0.25 * ats.keyword_similarity + 0.25 * semantic_avg, 2
-    )
-    return {"ats": ats, "semantic_panel": panel, "composite_score": composite}
+    return {
+        "ats": ats,
+        "semantic_match": match,
+        "semantic_panel": panel,
+        "composite_score": match.composite,
+    }
 
 
 def critique_node(state: GraphState) -> GraphState:
@@ -78,7 +80,12 @@ def critique_node(state: GraphState) -> GraphState:
         return {}
     settings = _settings()
     generator = build_generator(settings)
-    critique = generator.critique(state["extraction"], state["job_description"], state["ats"])
+    critique = generator.critique(
+        state["extraction"],
+        state["job_description"],
+        state["ats"],
+        semantic_score=state.get("composite_score"),
+    )
     critique, groundedness = apply_groundedness(critique, state["extraction"].text)
     critique = clamp_critique_scores(critique, state.get("composite_score") or critique.overall_score)
     findings = list(state.get("guardrails") or []) + output_schema_findings(
@@ -98,6 +105,7 @@ def report_node(state: GraphState) -> GraphState:
         candidate_id=state.get("candidate_id") or "anonymous",
         extraction=state.get("extraction"),
         ats=state.get("ats"),
+        semantic_match=state.get("semantic_match"),
         semantic_panel=list(state.get("semantic_panel") or []),
         critique=state.get("critique"),
         composite_score=state.get("composite_score"),

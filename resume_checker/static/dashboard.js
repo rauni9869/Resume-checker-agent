@@ -58,7 +58,20 @@ function render(data) {
   document.getElementById("fit-label").textContent = data.blocked ? "Blocked by guardrails" : fitLabel(score);
   document.getElementById("score-meta").textContent = data.blocked
     ? "The pipeline stopped before scoring."
-    : `Backend ${data.llm_backend} · candidate ${data.candidate_id}`;
+    : `Semantic ${data.semantic_match?.backend || "vectors"} · ${data.llm_backend} · ${data.candidate_id}`;
+
+  const semantic = data.semantic_match;
+  document.getElementById("semantic-meta").textContent = semantic
+    ? `Document cosine ${semantic.document_score.toFixed(1)} · requirement coverage ${semantic.requirement_coverage.toFixed(1)} (mean max-similarity of each JD chunk to resume chunks)`
+    : "Semantic matcher did not run.";
+  const align = document.getElementById("alignments");
+  align.innerHTML = "";
+  for (const item of semantic?.alignments || []) {
+    const li = document.createElement("li");
+    li.textContent = `${item.score.toFixed(0)} · JD: ${item.requirement} ↔ Resume: ${item.resume_span}`;
+    align.appendChild(li);
+  }
+  if (!align.children.length) align.innerHTML = "<li>No requirement chunks to align.</li>";
   setRing(data.blocked ? 0 : score);
 
   const dims = data.critique

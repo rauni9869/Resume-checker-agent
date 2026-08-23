@@ -35,6 +35,7 @@ class Generator(Protocol):
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
     ) -> StructuredCritique: ...
 
 
@@ -64,6 +65,7 @@ class TemplateGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
     ) -> StructuredCritique:
         resume = extraction.text
         quote = _first_line(resume)
@@ -74,8 +76,8 @@ class TemplateGenerator:
         format_score = 82 if bullets else 60
         impact_hits = len(re.findall(r"\b(\d+%|\$\d+|\d+\+|\d+\.\d+%?)\b", resume))
         impact_score = min(90.0, 58 + min(impact_hits, 4) * 8)
-        relevance = 0.6 * coverage + 0.4 * sim
-        overall = 0.4 * relevance + 0.2 * format_score + 0.2 * grammar_score + 0.2 * impact_score
+        relevance = semantic_score if semantic_score is not None else 0.6 * coverage + 0.4 * sim
+        overall = 0.55 * relevance + 0.15 * format_score + 0.15 * grammar_score + 0.15 * impact_score
 
         strengths = [f"Highlights {skill}" for skill in ats.matched_skills[:4]] or [
             "Core professional sections are present."
@@ -96,9 +98,9 @@ class TemplateGenerator:
         resume_skills = ", ".join(sorted(extract_skills(resume))[:8]) or "listed experience"
         return StructuredCritique(
             summary=(
-                f"Coverage of required skills is {coverage:.0f}% with TF-IDF similarity {sim:.0f}%. "
-                f"Matched: {', '.join(ats.matched_skills) or 'none'}. "
-                f"Missing: {', '.join(ats.missing_skills) or 'none'}."
+                f"Semantic fit {relevance:.0f}/100. "
+                f"Requirement terms matched: {', '.join(ats.matched_skills[:6]) or 'none'}. "
+                f"Gaps: {', '.join(ats.missing_skills[:6]) or 'none'}."
             ),
             strengths=strengths,
             gaps=gaps,
@@ -118,7 +120,7 @@ class TemplateGenerator:
             relevance=_dim(
                 "relevance",
                 relevance,
-                f"Skill overlap against the job description ({resume_skills}).",
+                "Context-vector similarity of the resume to the job (document + requirement chunks).",
                 quote,
             ),
             impact=_dim("impact", impact_score, "Counts measurable outcomes in the resume text.", quote),
@@ -146,6 +148,7 @@ class OllamaGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
     ) -> StructuredCritique:
         from langchain_ollama import ChatOllama
 
@@ -177,6 +180,7 @@ class HuggingFaceGenerator:
         extraction: ExtractionResult,
         job_description: str,
         ats: ATSScore,
+        semantic_score: float | None = None,
     ) -> StructuredCritique:
         from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
 

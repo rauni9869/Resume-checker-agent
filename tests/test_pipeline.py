@@ -10,6 +10,25 @@ from resume_checker.graph.pipeline import analyze_resume
 from resume_checker.guardrails import redact_pii, scan_injection
 from resume_checker.schemas import AnalysisRequest, Severity
 from resume_checker.scoring.ats import extract_skills, score_ats
+from resume_checker.scoring.matcher import semantic_match
+
+
+def test_semantic_vectors_rank_related_content_higher():
+    systems_resume = (
+        "Built a C++17 multithreaded OS scheduler with mutexes, fairness metrics, "
+        "and database B-tree indexes over 200K keys. Codeforces Expert."
+    )
+    nutanix_job = (
+        "Qualifications: C/C++ multi-threaded operating systems, distributed systems, "
+        "databases, file systems, algorithms and data structures."
+    )
+    retail_resume = (
+        "Store manager. Ran sales quota, trained associates, excel inventory, customer service."
+    )
+    related = semantic_match(systems_resume, nutanix_job)
+    unrelated = semantic_match(retail_resume, nutanix_job)
+    assert related.composite > unrelated.composite
+    assert related.document_score > unrelated.document_score
 
 
 def test_dynamic_terms_come_from_the_documents():
