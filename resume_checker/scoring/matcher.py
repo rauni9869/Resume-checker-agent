@@ -133,8 +133,22 @@ def get_encoder(backend: str = "auto", model_id: str = "intfloat/e5-small-v2"):
     return TfidfEncoder()
 
 
-def _to_percent(cosine: float) -> float:
-    return round(max(0.0, min(float(cosine), 1.0) * 100.0), 2)
+# Bi-encoders (E5) put most English professional text in a high cosine band.
+# Reporting cosine*100 made 0.79 look like a 79% match. Hits below the floor
+# contribute 0; 100 means cosine at or above the "full credit" end of the band.
+_NEURAL_FLOOR = 0.78
+_NEURAL_FULL = 0.92
+_SPARSE_FLOOR = 0.08
+_SPARSE_FULL = 0.38
+
+
+def calibrate_cosine(cosine: float, *, neural: bool) -> float:
+    lo, hi = (_NEURAL_FLOOR, _NEURAL_FULL) if neural else (_SPARSE_FLOOR, _SPARSE_FULL)
+    span = hi - lo
+    if span <= 0:
+        return 0.0
+    mapped = (float(cosine) - lo) / span
+    return round(100.0 * max(0.0, min(mapped, 1.0)), 2)
 
 
 def semantic_match(
@@ -144,11 +158,12 @@ def semantic_match(
 ) -> SemanticMatch:
     settings = settings or get_settings()
     encoder = get_encoder(settings.embedding_backend, settings.semantic_model)
+    neural = isinstance(encoder, TransformerEncoder)
     job_focus = job_focus_text(job_description)
     passages = resume_passages(resume_text)
     queries = requirement_queries(job_description)
 
-    if isinstance(encoder, TransformerEncoder):
+    if neural:
         resume_doc = encoder.encode([(resume_text or " ")[:7000]], as_query=False)[0]
         job_doc = encoder.encode([(job_focus or job_description or " ")[:7000]], as_query=True)[0]
         passage_mat = encoder.encode(passages, as_query=False)
@@ -171,26 +186,27 @@ def semantic_match(
         sims = query_mat @ passage_mat.T
         best_idx = sims.argmax(axis=1)
         best_vals = sims.max(axis=1)
-        coverage = float(best_vals.mean())
+        coverage_hits: list[float] = []
         for label, idx, value in zip(queries, best_idx, best_vals, strict=True):
+            calibrated = calibrate_cosine(float(value), neural=neural)
+            coverage_hits.append(calibrated)
             alignments.append(
                 RequirementAlignment(
                     requirement=label[:240],
                     resume_span=passages[int(idx)][:240],
-                    score=_to_percent(float(value)),
+                    score=calibrated,
                 )
             )
         alignments.sort(key=lambda item: item.score, reverse=True)
+        coverage = float(np.mean(coverage_hits)) if coverage_hits else 0.0
     else:
-        coverage = document_cosine
+        coverage = calibrate_cosine(document_cosine, neural=neural)
 
-    scores = [item.score for item in alignments]
-    cut = float(np.median(scores)) if scores else 0.0
-    matched = [item.requirement for item in alignments if item.score >= cut]
-    gaps = [item.requirement for item in alignments if item.score < cut]
+    matched = [item.requirement for item in alignments if item.score > 0]
+    gaps = [item.requirement for item in alignments if item.score <= 0]
 
-    document_score = _to_percent(document_cosine)
-    requirement_coverage = _to_percent(coverage)
+    document_score = calibrate_cosine(document_cosine, neural=neural)
+    requirement_coverage = round(float(coverage), 2)
     composite = round(0.25 * document_score + 0.75 * requirement_coverage, 2)
     return SemanticMatch(
         backend=encoder.name,

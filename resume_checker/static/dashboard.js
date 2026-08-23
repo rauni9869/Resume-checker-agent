@@ -62,7 +62,7 @@ function render(data) {
 
   const semantic = data.semantic_match;
   document.getElementById("semantic-meta").textContent = semantic
-    ? `Document cosine ${semantic.document_score.toFixed(1)} · requirement coverage ${semantic.requirement_coverage.toFixed(1)} (mean max-similarity of each JD chunk to resume chunks)`
+    ? `Calibrated similarity (not raw cosine×100). Hits below the embedding floor score 0. Document ${semantic.document_score.toFixed(1)} · requirement coverage ${semantic.requirement_coverage.toFixed(1)} (mean of per-requirement calibrated max-hits)`
     : "Semantic matcher did not run.";
   const align = document.getElementById("alignments");
   align.innerHTML = "";

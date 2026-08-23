@@ -10,7 +10,7 @@ from resume_checker.graph.pipeline import analyze_resume
 from resume_checker.guardrails import redact_pii, scan_injection
 from resume_checker.schemas import AnalysisRequest, Severity
 from resume_checker.scoring.ats import extract_skills, score_ats
-from resume_checker.scoring.matcher import requirement_queries, semantic_match
+from resume_checker.scoring.matcher import calibrate_cosine, requirement_queries, semantic_match
 
 
 def test_requirement_retrieval_uses_resume_bullet_context():
@@ -56,9 +56,20 @@ def test_requirement_retrieval_uses_resume_bullet_context():
     related = semantic_match(systems_resume, nutanix_job)
     unrelated = semantic_match(retail_resume, nutanix_job)
     assert related.composite > unrelated.composite
-    assert related.document_score > unrelated.document_score
+    assert related.requirement_coverage > unrelated.requirement_coverage
+    assert unrelated.composite < 20
+    assert all(item.score == 0 for item in unrelated.alignments) or unrelated.requirement_coverage < 15
     index_spans = [item.resume_span for item in match.alignments]
     assert len(set(index_spans)) >= 2
+
+
+def test_cosine_floor_zeros_weak_e5_band():
+    assert calibrate_cosine(0.79, neural=True) < 10
+    assert calibrate_cosine(0.84, neural=True) < 50
+    assert calibrate_cosine(0.92, neural=True) == 100
+    assert calibrate_cosine(0.70, neural=True) == 0
+    assert calibrate_cosine(0.20, neural=False) > 30
+    assert calibrate_cosine(0.04, neural=False) == 0
 
 
 def test_dynamic_terms_come_from_the_documents():
